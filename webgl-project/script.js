@@ -59,7 +59,7 @@ for (let i = 0; i < numPoints; i++) {
     currentY = (currentY + cornerY) / 2;
 
     points.push(currentX);
-    points/push(currentY);
+    points.push(currentY);
 }
 
 const buffer = gl.createBuffer();
