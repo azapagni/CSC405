@@ -9,6 +9,12 @@ if (!gl){
 const vertexShaderSource = document.getElementById('vertex-shader').textContent;
 const fragmentShaderSource = document.getElementById('fragment-shader').textContent;
 
+//checks
+console.log('Vertex shader source:', vertexShaderSource);
+console.log('Fragment shader source:', fragmentShaderSource);
+console.log('Vertex shader source length:', vertexShaderSource.length);
+console.log('Fragment shader source length:', fragmentShaderSource.length);
+
 const vertexShader = gl.createShader(gl.VERTEX_SHADER);
 const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
 
@@ -32,6 +38,14 @@ gl.attachShader(program, vertexShader);
 gl.attachShader(program, fragmentShader);
 
 gl.linkProgram(program);
+//checks
+console.log('Program object:', program);
+console.log('Is program valid?', gl.isProgram(program));
+
+if(!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.error('Program link error:', gl.getProgramInfoLog(program));
+}
+
 gl.useProgram(program);
 //check
 if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
