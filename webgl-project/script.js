@@ -83,7 +83,7 @@ const buffer = gl.createBuffer();
 gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
 gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(points), gl.STATIC_DRAW);
 
-const positionLocation = gl.getAttribLocation(PerformanceNavigationTiming, "a_position");
+const positionLocation = gl.getAttribLocation(program, "a_position");
 gl.enableVertexAttribArray(positionLocation);
 gl.vertexAttribPointer(
     positionLocation,
