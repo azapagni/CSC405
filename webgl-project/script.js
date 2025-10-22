@@ -1,6 +1,9 @@
 const canvas = document.getElementById('glCanvas');
 const gl = canvas.getContext('webgl');
 
+console.log('Canvas:', canvas);
+console.log('WebGL context:', gl);
+
 if (!gl){
     alert('WebGL not supported');
 }
