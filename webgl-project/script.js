@@ -16,7 +16,16 @@ gl.shaderSource(vertexShader, vertexShaderSource);
 gl.shaderSource(fragmentShader, fragmentShaderSource);
 
 gl.compileShader(vertexShader);
+//check
+if(!gl.getShaderParameter(vertexShader, gl.COMPILE_STATUS)) {
+    console.error('Vertex shader error:', gl.getShaderInfoLog(vertexShader));
+}
+
 gl.compileShader(fragmentShader);
+//check
+if(!gl.getShaderParameter(fragmentShader, gl.COMPILE_STATUS)) {
+    console.error('Fragment shader error:', gl.getShaderInfoLog(fragmentShader));
+}
 
 const program = gl.createProgram();
 gl.attachShader(program, vertexShader);
@@ -24,16 +33,7 @@ gl.attachShader(program, fragmentShader);
 
 gl.linkProgram(program);
 gl.useProgram(program);
-
-//checks
-if(!gl.getShaderParameter(vertexShader, gl.COMPILE_STATUS)) {
-    console.error('Vertex shader error:', gl.getShaderInfoLog(vertexShader));
-}
-
-if(!gl.getShaderParameter(fragmentShader, gl.COMPILE_STATUS)) {
-    console.error('Fragment shader error:', gl.getShaderInfoLog(fragmentShader));
-}
-
+//check
 if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
     console.error('Program link error:', gl.getProgramInfoLog(program));
 }
