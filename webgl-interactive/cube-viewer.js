@@ -1,4 +1,3 @@
-// Helper functions
 function vec3(x, y, z) {
     return [x, y, z];
 }
@@ -28,7 +27,7 @@ function lookAt(eye, at, up) {
     const n = normalize(subtract(eye, at));
     const u = normalize(cross(up, n));
     const v = normalize(cross(n, u));
-    
+   
     return [
         u[0], v[0], n[0], 0,
         u[1], v[1], n[1], 0,
@@ -56,6 +55,10 @@ function ortho(left, right, bottom, top, near, far) {
 const canvas = document.getElementById('glCanvas');
 const gl = canvas.getContext('webgl2');
 
+if (!gl) {
+    alert('WebGL 2 not supported');
+}
+
 // Shaders
 const vertexShaderSource = `#version 300 es
     in vec4 aPosition;
@@ -63,7 +66,7 @@ const vertexShaderSource = `#version 300 es
     out vec4 vColor;
     uniform mat4 uModelViewMatrix;
     uniform mat4 uProjectionMatrix;
-    
+            
     void main() {
         vColor = aColor;
         gl_Position = uProjectionMatrix * uModelViewMatrix * aPosition;
@@ -74,7 +77,7 @@ const fragmentShaderSource = `#version 300 es
     precision mediump float;
     in vec4 vColor;
     out vec4 fColor;
-    
+            
     void main() {
         fColor = vColor;
     }
@@ -85,6 +88,9 @@ function compileShader(source, type) {
     const shader = gl.createShader(type);
     gl.shaderSource(shader, source);
     gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+        console.error('Shader error:', gl.getShaderInfoLog(shader));
+    }
     return shader;
 }
 
@@ -95,31 +101,49 @@ const program = gl.createProgram();
 gl.attachShader(program, vertexShader);
 gl.attachShader(program, fragmentShader);
 gl.linkProgram(program);
+        
+if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.error('Program error:', gl.getProgramInfoLog(program));
+}
+        
 gl.useProgram(program);
 
 // Cube data
 const positions = [
+    // Front face
     -0.5, -0.5,  0.5,  0.5, -0.5,  0.5,  0.5,  0.5,  0.5,
     -0.5, -0.5,  0.5,  0.5,  0.5,  0.5, -0.5,  0.5,  0.5,
+    // Back face
     -0.5, -0.5, -0.5, -0.5,  0.5, -0.5,  0.5,  0.5, -0.5,
     -0.5, -0.5, -0.5,  0.5,  0.5, -0.5,  0.5, -0.5, -0.5,
+    // Top face
     -0.5,  0.5, -0.5, -0.5,  0.5,  0.5,  0.5,  0.5,  0.5,
     -0.5,  0.5, -0.5,  0.5,  0.5,  0.5,  0.5,  0.5, -0.5,
+    // Bottom face
     -0.5, -0.5, -0.5,  0.5, -0.5, -0.5,  0.5, -0.5,  0.5,
     -0.5, -0.5, -0.5,  0.5, -0.5,  0.5, -0.5, -0.5,  0.5,
-     0.5, -0.5, -0.5,  0.5,  0.5, -0.5,  0.5,  0.5,  0.5,
-     0.5, -0.5, -0.5,  0.5,  0.5,  0.5,  0.5, -0.5,  0.5,
+    // Right face
+    0.5, -0.5, -0.5,  0.5,  0.5, -0.5,  0.5,  0.5,  0.5,
+    0.5, -0.5, -0.5,  0.5,  0.5,  0.5,  0.5, -0.5,  0.5,
+    // Left face
     -0.5, -0.5, -0.5, -0.5, -0.5,  0.5, -0.5,  0.5,  0.5,
     -0.5, -0.5, -0.5, -0.5,  0.5,  0.5, -0.5,  0.5, -0.5
 ];
 
 const colors = [];
 const faceColors = [
-    [1, 0, 0, 1], [0, 1, 0, 1], [0, 0, 1, 1],
-    [1, 1, 0, 1], [1, 0, 1, 1], [0, 1, 1, 1]
+    [1, 0, 0, 1], // Red
+    [0, 1, 0, 1], // Green
+    [0, 0, 1, 1], // Blue
+    [1, 1, 0, 1], // Yellow
+    [1, 0, 1, 1], // Magenta
+    [0, 1, 1, 1]  // Cyan
 ];
+        
 for (let face of faceColors) {
-    for (let i = 0; i < 6; i++) colors.push(...face);
+    for (let i = 0; i < 6; i++) {
+        colors.push(...face);
+    }
 }
 
 const numPositions = positions.length / 3;
@@ -133,12 +157,13 @@ const colorBuffer = gl.createBuffer();
 gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
 gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors), gl.STATIC_DRAW);
 
-// Attributes
+// Get locations
 const aPositionLoc = gl.getAttribLocation(program, 'aPosition');
 const aColorLoc = gl.getAttribLocation(program, 'aColor');
 const modelViewMatrixLoc = gl.getUniformLocation(program, 'uModelViewMatrix');
 const projectionMatrixLoc = gl.getUniformLocation(program, 'uProjectionMatrix');
 
+// Setup attributes
 gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
 gl.vertexAttribPointer(aPositionLoc, 3, gl.FLOAT, false, 0, 0);
 gl.enableVertexAttribArray(aPositionLoc);
@@ -148,7 +173,7 @@ gl.vertexAttribPointer(aColorLoc, 4, gl.FLOAT, false, 0, 0);
 gl.enableVertexAttribArray(aColorLoc);
 
 gl.enable(gl.DEPTH_TEST);
-gl.clearColor(0.9, 0.9, 0.9, 1.0);
+gl.clearColor(0.95, 0.95, 0.95, 1.0);
 
 // Fixed values
 const at = vec3(0.0, 0.0, 0.0);
@@ -191,21 +216,21 @@ document.getElementById('depthSlider').oninput = function(e) {
 // Render loop
 function render() {
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    
+            
     const eye = vec3(
         radius * Math.sin(theta) * Math.cos(phi),
         radius * Math.sin(theta) * Math.sin(phi),
         radius * Math.cos(theta)
     );
-    
+            
     const modelViewMatrix = lookAt(eye, at, up);
     const projectionMatrix = ortho(left, right, bottom, ytop, near, far);
-    
+            
     gl.uniformMatrix4fv(modelViewMatrixLoc, false, flatten(modelViewMatrix));
     gl.uniformMatrix4fv(projectionMatrixLoc, false, flatten(projectionMatrix));
-    
+            
     gl.drawArrays(gl.TRIANGLES, 0, numPositions);
-    
+            
     requestAnimationFrame(render);
 }
 
