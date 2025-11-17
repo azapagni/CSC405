@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Cube Viewer</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            color: white;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        .main-layout {
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            gap: 20px;
+        }
+        canvas {
+            border: 3px solid white;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            background: #1a1a2e;
+            display: block;
+        }
+        .controls {
+            background: rgba(255,255,255,0.1);
+            padding: 20px;
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
+            height: fit-content;
+        }
+        .control-group {
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid rgba(255,255,255,0.2);
+        }
+        .control-group:last-child {
+            border-bottom: none;
+        }
+        .control-group h3 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            font-size: 16px;
+            color: #3498db;
+        }
+        .slider-container {
+            margin-bottom: 15px;
+        }
+        .slider-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+        input[type="range"] {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: rgba(255,255,255,0.2);
+            outline: none;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #3498db;
+            cursor: pointer;
+        }
+        input[type="range"]::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #3498db;
+            cursor: pointer;
+            border: none;
+        }
+        .value-display {
+            color: #3498db;
+            font-weight: bold;
+        }
+        button {
+            width: 100%;
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-top: 10px;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #2980b9;
+        }
+        .info {
+            background: rgba(52, 152, 219, 0.2);
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 12px;
+            margin-top: 15px;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎲 Interactive WebGL Cube Viewer</h1>
+        <div class="main-layout">
+            <div>
+                <canvas id="glCanvas" width="700" height="700"></canvas>
+            </div>
+            <div class="controls">
+                <div class="control-group">
+                    <h3>📐 Camera Position</h3>
+                    <div class="slider-container">
+                        <div class="slider-label">
+                            <span>Radius</span>
+                            <span class="value-display" id="radiusValue">3.0</span>
+                        </div>
+                        <input id="radiusSlider" type="range" min="1" max="10" step="0.1" value="3">
+                    </div>
+                    <div class="slider-container">
+                        <div class="slider-label">
+                            <span>Theta (θ)</span>
+                            <span class="value-display" id="thetaValue">0.79</span>
+                        </div>
+                        <input id="thetaSlider" type="range" min="0" max="3.14" step="0.01" value="0.79">
+                    </div>
+                    <div class="slider-container">
+                        <div class="slider-label">
+                            <span>Phi (φ)</span>
+                            <span class="value-display" id="phiValue">0.79</span>
+                        </div>
+                        <input id="phiSlider" type="range" min="0" max="6.28" step="0.01" value="0.79">
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <h3>🔍 Clipping Planes</h3>
+                    <div class="slider-container">
+                        <div class="slider-label">
+                            <span>Depth (Near/Far)</span>
+                            <span class="value-display" id="depthValue">2.0</span>
+                        </div>
+                        <input id="depthSlider" type="range" min="0.5" max="6" step="0.1" value="2">
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <h3>📏 Orthographic Bounds</h3>
+                    <div class="slider-container">
+                        <div class="slider-label">
+                            <span>Horizontal (Left/Right)</span>
+                            <span class="value-display" id="horizontalValue">1.0</span>
+                        </div>
+                        <input id="horizontalSlider" type="range" min="0.1" max="3" step="0.1" value="1">
+                    </div>
+                    <div class="slider-container">
+                        <div class="slider-label">
+                            <span>Vertical (Bottom/Top)</span>
+                            <span class="value-display" id="verticalValue">1.0</span>
+                        </div>
+                        <input id="verticalSlider" type="range" min="0.1" max="3" step="0.1" value="1">
+                    </div>
+                </div>
+
+                <button onclick="resetView()">🔄 Reset All Values</button>
+
+                <div class="info">
+                    <strong>Tips:</strong><br>
+                    • Adjust Radius to move camera closer/farther<br>
+                    • Theta & Phi control camera angle<br>
+                    • Depth controls near/far clipping<br>
+                    • Horizontal/Vertical change view bounds
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="cube-viewer.js"></script>
+</body>
+</html>
