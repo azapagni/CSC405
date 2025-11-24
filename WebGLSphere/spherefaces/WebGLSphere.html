@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebGL Subdivided Sphere</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background-color: #1a1a1a;
+            font-family: Arial, sans-serif;
+        }
+        canvas {
+            border: 2px solid #444;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        label {
+            color: white;
+            font-size: 16px;
+        }
+        input[type="range"] {
+            width: 200px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="glCanvas" width="600" height="600"></canvas>
+    <div class="controls">
+        <label for="subdivisions">Subdivisions: <span id="subValue">4</span></label>
+        <input type="range" id="subdivisions" min="0" max="6" value="4">
+    </div>
+
+    <script>
+        const canvas = document.getElementById('glCanvas');
+        const gl = canvas.getContext('webgl');
+        
+        if (!gl) {
+            alert('WebGL not supported');
+        }
+
+        // Vertex shader
+        const vsSource = `
+            attribute vec4 aPosition;
+            attribute vec3 aNormal;
+            uniform mat4 uModelView;
+            uniform mat4 uProjection;
+            varying vec3 vNormal;
+            varying vec3 vPosition;
+            
+            void main() {
+                vNormal = aNormal;
+                vPosition = aPosition.xyz;
+                gl_Position = uProjection * uModelView * aPosition;
+            }
+        `;
+        
+        // Fragment shader
+        const fsSource = `
+            precision mediump float;
+            varying vec3 vNormal;
+            varying vec3 vPosition;
+            
+            void main() {
+                vec3 color = vec3(0.3, 0.6, 0.9);
+                gl_FragColor = vec4(color, 1.0);
+            }
+        `;
+        
+        // Compile shader
+        function compileShader(gl, source, type) {
+            const shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                console.error('Shader compile error:', gl.getShaderInfoLog(shader));
+                gl.deleteShader(shader);
+                return null;
+            }
+            return shader;
+        }
+        
+        const vs = compileShader(gl, vsSource, gl.VERTEX_SHADER);
+        const fs = compileShader(gl, fsSource, gl.FRAGMENT_SHADER);
+        
+        const program = gl.createProgram();
+        gl.attachShader(program, vs);
+        gl.attachShader(program, fs);
+        gl.linkProgram(program);
+        
+        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+            console.error('Program link error:', gl.getProgramInfoLog(program));
+        }
+
+        // Vector operations
+        function mix(a, b, t) {
+            return [
+                a[0] + (b[0] - a[0]) * t,
+                a[1] + (b[1] - a[1]) * t,
+                a[2] + (b[2] - a[2]) * t,
+                1.0
+            ];
+        }
+        
+        function normalize(v) {
+            const len = Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+            return [v[0] / len, v[1] / len, v[2] / len, 1.0];
+        }
+
+        // Matrix operations
+        function perspective(fov, aspect, near, far) {
+            const f = 1.0 / Math.tan(fov / 2);
+            return [
+                f / aspect, 0, 0, 0,
+                0, f, 0, 0,
+                0, 0, (far + near) / (near - far), -1,
+                0, 0, (2 * far * near) / (near - far), 0
+            ];
+        }
+        
+        function translate(tx, ty, tz) {
+            return [
+                1, 0, 0, 0,
+                0, 1, 0, 0,
+                0, 0, 1, 0,
+                tx, ty, tz, 1
+            ];
+        }
+
+        let buffer = gl.createBuffer();
+
+        function generateSphere(subdivisions) {
+            let positions = [];
+            
+            function triangle(a, b, c) {
+                positions.push(...a.slice(0, 3));
+                positions.push(...b.slice(0, 3));
+                positions.push(...c.slice(0, 3));
+            }
+            
+            function divideTriangle(a, b, c, count) {
+                if (count > 0) {
+                    const ab = normalize(mix(a, b, 0.5));
+                    const ac = normalize(mix(a, c, 0.5));
+                    const bc = normalize(mix(b, c, 0.5));
+                    
+                    divideTriangle(a, ab, ac, count - 1);
+                    divideTriangle(ab, b, bc, count - 1);
+                    divideTriangle(bc, c, ac, count - 1);
+                    divideTriangle(ab, bc, ac, count - 1);
+                } else {
+                    triangle(a, b, c);
+                }
+            }
+            
+            function tetrahedron(a, b, c, d, n) {
+                divideTriangle(a, b, c, n);
+                divideTriangle(d, c, b, n);
+                divideTriangle(a, d, b, n);
+                divideTriangle(a, c, d, n);
+            }
+            
+            const va = [0.0, 0.0, -1.0, 1.0];
+            const vb = [0.0, 0.942809, 0.333333, 1.0];
+            const vc = [-0.816497, -0.471405, 0.333333, 1.0];
+            const vd = [0.816497, -0.471405, 0.333333, 1.0];
+            
+            tetrahedron(va, vb, vc, vd, subdivisions);
+            
+            return positions;
+        }
+
+        function render(subdivisions) {
+            const positions = generateSphere(subdivisions);
+            
+            gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
+            
+            const aPosition = gl.getAttribLocation(program, 'aPosition');
+            const aNormal = gl.getAttribLocation(program, 'aNormal');
+            
+            gl.enableVertexAttribArray(aPosition);
+            gl.vertexAttribPointer(aPosition, 3, gl.FLOAT, false, 0, 0);
+            
+            gl.enableVertexAttribArray(aNormal);
+            gl.vertexAttribPointer(aNormal, 3, gl.FLOAT, false, 0, 0);
+            
+            const uModelView = gl.getUniformLocation(program, 'uModelView');
+            const uProjection = gl.getUniformLocation(program, 'uProjection');
+            
+            gl.enable(gl.DEPTH_TEST);
+            gl.clearColor(0.1, 0.1, 0.1, 1.0);
+            
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+            gl.useProgram(program);
+            
+            const projection = perspective(Math.PI / 4, canvas.width / canvas.height, 0.1, 100.0);
+            const trans = translate(0, 0, -3);
+            
+            gl.uniformMatrix4fv(uProjection, false, projection);
+            gl.uniformMatrix4fv(uModelView, false, trans);
+            
+            gl.drawArrays(gl.TRIANGLES, 0, positions.length / 3);
+        }
+
+        // Initial render
+        render(4);
+
+        // Handle slider input
+        const slider = document.getElementById('subdivisions');
+        const subValue = document.getElementById('subValue');
+        
+        slider.addEventListener('input', (e) => {
+            const value = parseInt(e.target.value);
+            subValue.textContent = value;
+            render(value);
+        });
+    </script>
+</body>
+</html>
