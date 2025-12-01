@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Painter's Algorithm - Hidden Surface Removal</title>
+    <style>
+        body {
+            margin: 20px;
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        canvas {
+            border: 2px solid #333;
+            display: block;
+            margin: 20px auto;
+            background: white;
+        }
+        .controls {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .control {
+            margin: 15px 0;
+        }
+        label {
+            display: inline-block;
+            width: 180px;
+            font-weight: bold;
+        }
+        input[type="range"] {
+            width: 300px;
+        }
+        .info {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            border-left: 4px solid #2196F3;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+            border: 2px solid #333;
+            background: white;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        button.active {
+            background: #4CAF50;
+            color: white;
+            border-color: #4CAF50;
+        }
+        .warning {
+            background: #fff3cd;
+            padding: 10px;
+            border-radius: 5px;
+            border-left: 4px solid #ff9800;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Painter's Algorithm - Hidden Surface Removal</h1>
+        
+        <div class="info">
+            <h3>Algorithm Status: <span id="algorithmStatus">Painter's Algorithm (Depth Sorting)</span></h3>
+            <p id="statusDescription">Polygons are sorted by depth and drawn back-to-front. Watch for artifacts when faces overlap!</p>
+        </div>
+        
+        <canvas id="glCanvas" width="700" height="700"></canvas>
+        
+        <div class="controls">
+            <h3>Rendering Mode</h3>
+            <button id="painterBtn" class="active" onclick="setRenderMode('painter')">Painter's Algorithm</button>
+            <button id="zBufferBtn" onclick="setRenderMode('zbuffer')">Z-Buffer (Correct)</button>
+            
+            <div class="warning">
+                <strong>Note:</strong> Rotate the view to see the Painter's algorithm fail on overlapping faces!
+            </div>
+            
+            <h3>Camera Controls</h3>
+            <div class="control">
+                <label>Rotation Y: <span id="rotYValue">0.0</span></label>
+                <input id="rotYSlider" type="range" min="0" max="6.28" step="0.01" value="0">
+            </div>
+            
+            <div class="control">
+                <label>Rotation X: <span id="rotXValue">0.3</span></label>
+                <input id="rotXSlider" type="range" min="0" max="6.28" step="0.01" value="0.3">
+            </div>
+            
+            <div class="control">
+                <label>Camera Distance: <span id="distValue">5.0</span></label>
+                <input id="distSlider" type="range" min="2" max="10" step="0.1" value="5">
+            </div>
+            
+            <div class="control">
+                <button onclick="toggleAutoRotate()">
+                    <span id="autoRotateText">Start Auto-Rotate</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /* ============================================
+         * PAINTER'S ALGORITHM DEMONSTRATION
+         * ============================================
+         * This program demonstrates the Painter's Algorithm
+         * for hidden surface removal by rendering overlapping
+         * triangular faces that form intersecting planes.
+         * 
+         * The Painter's Algorithm sorts polygons by depth
+         * (distance from camera) and renders them back-to-front.
+         * This creates the illusion of depth, but fails when
+         * polygons overlap in complex ways.
+         * ============================================ */
+
+        // ============================================
+        // UTILITY FUNCTIONS - Vector and Matrix Math
+        // ============================================
+        
+        /**
+         * Creates a 3D vector
+         */
+        function vec3(x, y, z) {
+            return [x, y, z];
+        }
+
+        /**
+         * Subtracts two vectors
+         */
+        function subtract(u, v) {
+            return [u[0] - v[0], u[1] - v[1], u[2] - v[2]];
+        }
+
+        /**
+         * Normalizes a vector to unit length
+         */
+        function normalize(v) {
+            const len = Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+            return [v[0] / len, v[1] / len, v[2] / len];
+        }
+
+        /**
+         * Cross product of two vectors
+         */
+        function cross(u, v) {
+            return [
+                u[1] * v[2] - u[2] * v[1],
+                u[2] * v[0] - u[0] * v[2],
+                u[0] * v[1] - u[1] * v[0]
+            ];
+        }
+
+        /**
+         * Flattens nested array into Float32Array for WebGL
+         */
+        function flatten(arr) {
+            return new Float32Array([].concat(...arr));
+        }
+
+        /**
+         * Creates a look-at view matrix
+         * @param {Array} eye - Camera position
+         * @param {Array} at - Look-at target
+         * @param {Array} up - Up vector
+         */
+        function lookAt(eye, at, up) {
+            const n = normalize(subtract(eye, at));
+            const u = normalize(cross(up, n));
+            const v = normalize(cross(n, u));
+            
+            return [
+                u[0], v[0], n[0], 0,
+                u[1], v[1], n[1], 0,
+                u[2], v[2], n[2], 0,
+                -u[0] * eye[0] - u[1] * eye[1] - u[2] * eye[2],
+                -v[0] * eye[0] - v[1] * eye[1] - v[2] * eye[2],
+                -n[0] * eye[0] - n[1] * eye[1] - n[2] * eye[2],
+                1
+            ];
+        }
+
+        /**
+         * Creates a perspective projection matrix
+         * @param {Number} fov - Field of view in radians
+         * @param {Number} aspect - Aspect ratio
+         * @param {Number} near - Near clipping plane
+         * @param {Number} far - Far clipping plane
+         */
+        function perspective(fov, aspect, near, far) {
+            const f = 1.0 / Math.tan(fov / 2);
+            const nf = 1 / (near - far);
+            
+            return [
+                f / aspect, 0, 0, 0,
+                0, f, 0, 0,
+                0, 0, (far + near) * nf, -1,
+                0, 0, (2 * far * near) * nf, 0
+            ];
+        }
+
+        /**
+         * Multiplies a 4x4 matrix by a 4D vector
+         */
+        function multiplyMatrixVector(mat, vec) {
+            return [
+                mat[0] * vec[0] + mat[4] * vec[1] + mat[8] * vec[2] + mat[12] * vec[3],
+                mat[1] * vec[0] + mat[5] * vec[1] + mat[9] * vec[2] + mat[13] * vec[3],
+                mat[2] * vec[0] + mat[6] * vec[1] + mat[10] * vec[2] + mat[14] * vec[3],
+                mat[3] * vec[0] + mat[7] * vec[1] + mat[11] * vec[2] + mat[15] * vec[3]
+            ];
+        }
+
+        /**
+         * Multiplies two 4x4 matrices
+         */
+        function multiplyMatrices(a, b) {
+            const result = new Array(16);
+            for (let i = 0; i < 4; i++) {
+                for (let j = 0; j < 4; j++) {
+                    result[i * 4 + j] = 0;
+                    for (let k = 0; k < 4; k++) {
+                        result[i * 4 + j] += a[i * 4 + k] * b[k * 4 + j];
+                    }
+                }
+            }
+            return result;
+        }
+
+        // ============================================
+        // WEBGL INITIALIZATION
+        // ============================================
+        
+        const canvas = document.getElementById('glCanvas');
+        const gl = canvas.getContext('webgl2');
+
+        if (!gl) {
+            alert('WebGL 2 not supported');
+        }
+
+        // ============================================
+        // SHADER PROGRAMS
+        // ============================================
+        
+        /**
+         * Vertex Shader - Transforms vertices and passes color
+         */
+        const vertexShaderSource = `#version 300 es
+            in vec4 aPosition;
+            in vec4 aColor;
+            out vec4 vColor;
+            uniform mat4 uModelViewMatrix;
+            uniform mat4 uProjectionMatrix;
+            
+            void main() {
+                vColor = aColor;
+                gl_Position = uProjectionMatrix * uModelViewMatrix * aPosition;
+            }
+        `;
+
+        /**
+         * Fragment Shader - Outputs interpolated color
+         */
+        const fragmentShaderSource = `#version 300 es
+            precision mediump float;
+            in vec4 vColor;
+            out vec4 fColor;
+            
+            void main() {
+                fColor = vColor;
+            }
+        `;
+
+        /**
+         * Compiles a shader from source code
+         */
+        function compileShader(source, type) {
+            const shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                console.error('Shader compilation error:', gl.getShaderInfoLog(shader));
+            }
+            return shader;
+        }
+
+        // Create and link shader program
+        const vertexShader = compileShader(vertexShaderSource, gl.VERTEX_SHADER);
+        const fragmentShader = compileShader(fragmentShaderSource, gl.FRAGMENT_SHADER);
+        const program = gl.createProgram();
+        gl.attachShader(program, vertexShader);
+        gl.attachShader(program, fragmentShader);
+        gl.linkProgram(program);
+
+        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+            console.error('Program linking error:', gl.getProgramInfoLog(program));
+        }
+
+        gl.useProgram(program);
+
+        // ============================================
+        // GEOMETRY DEFINITION - INTERSECTING PLANES
+        // ============================================
+        
+        /**
+         * PRIMITIVE DESCRIPTION:
+         * We create three intersecting rectangular planes that
+         * overlap each other in 3D space. Each plane consists
+         * of two triangles (6 vertices total per plane).
+         * 
+         * The planes are positioned to deliberately create
+         * depth ambiguity - demonstrating where the Painter's
+         * Algorithm fails due to cyclic overlap.
+         * 
+         * Plane 1 (Red): Vertical plane on XY axis
+         * Plane 2 (Green): Vertical plane on YZ axis  
+         * Plane 3 (Blue): Horizontal plane on XZ axis
+         */
+        
+        // Triangle faces - each group of 6 vertices forms one rectangular plane
+        const positions = [
+            // PLANE 1 - Red vertical plane (XY plane)
+            -1.0, -1.0,  0.0,   // Triangle 1
+             1.0, -1.0,  0.0,
+             1.0,  1.0,  0.0,
+            -1.0, -1.0,  0.0,   // Triangle 2
+             1.0,  1.0,  0.0,
+            -1.0,  1.0,  0.0,
+            
+            // PLANE 2 - Green vertical plane (YZ plane)
+             0.0, -1.0, -1.0,   // Triangle 1
+             0.0, -1.0,  1.0,
+             0.0,  1.0,  1.0,
+             0.0, -1.0, -1.0,   // Triangle 2
+             0.0,  1.0,  1.0,
+             0.0,  1.0, -1.0,
+            
+            // PLANE 3 - Blue horizontal plane (XZ plane)
+            -1.0,  0.0, -1.0,   // Triangle 1
+             1.0,  0.0, -1.0,
+             1.0,  0.0,  1.0,
+            -1.0,  0.0, -1.0,   // Triangle 2
+             1.0,  0.0,  1.0,
+            -1.0,  0.0,  1.0
+        ];
+
+        // Colors for each vertex - semi-transparent to show overlap
+        const colors = [
+            // Red plane (semi-transparent)
+            0.9, 0.2, 0.2, 0.7,
+            0.9, 0.2, 0.2, 0.7,
+            0.9, 0.2, 0.2, 0.7,
+            0.9, 0.2, 0.2, 0.7,
+            0.9, 0.2, 0.2, 0.7,
+            0.9, 0.2, 0.2, 0.7,
+            
+            // Green plane (semi-transparent)
+            0.2, 0.9, 0.2, 0.7,
+            0.2, 0.9, 0.2, 0.7,
+            0.2, 0.9, 0.2, 0.7,
+            0.2, 0.9, 0.2, 0.7,
+            0.2, 0.9, 0.2, 0.7,
+            0.2, 0.9, 0.2, 0.7,
+            
+            // Blue plane (semi-transparent)
+            0.2, 0.2, 0.9, 0.7,
+            0.2, 0.2, 0.9, 0.7,
+            0.2, 0.2, 0.9, 0.7,
+            0.2, 0.2, 0.9, 0.7,
+            0.2, 0.2, 0.9, 0.7,
+            0.2, 0.2, 0.9, 0.7
+        ];
+
+        const numVertices = positions.length / 3;
+
+        // ============================================
+        // BUFFER SETUP
+        // ============================================
+        
+        // Create and populate position buffer
+        const positionBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
+
+        // Create and populate color buffer
+        const colorBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors), gl.STATIC_DRAW);
+
+        // Get attribute and uniform locations
+        const aPositionLoc = gl.getAttribLocation(program, 'aPosition');
+        const aColorLoc = gl.getAttribLocation(program, 'aColor');
+        const modelViewMatrixLoc = gl.getUniformLocation(program, 'uModelViewMatrix');
+        const projectionMatrixLoc = gl.getUniformLocation(program, 'uProjectionMatrix');
+
+        // Setup vertex attributes
+        gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+        gl.vertexAttribPointer(aPositionLoc, 3, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(aPositionLoc);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+        gl.vertexAttribPointer(aColorLoc, 4, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(aColorLoc);
+
+        // Enable blending for transparency
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        
+        gl.clearColor(0.95, 0.95, 0.95, 1.0);
+
+        // ============================================
+        // RENDERING STATE VARIABLES
+        // ============================================
+        
+        let renderMode = 'painter';  // 'painter' or 'zbuffer'
+        let rotationY = 0.0;
+        let rotationX = 0.3;
+        let cameraDistance = 5.0;
+        let autoRotate = false;
+
+        // ============================================
+        // PAINTER'S ALGORITHM IMPLEMENTATION
+        // ============================================
+        
+        /**
+         * Calculates the average depth (z-coordinate) of a triangle
+         * in camera space. Used for depth sorting in Painter's Algorithm.
+         * 
+         * @param {Array} vertices - 9 values (3 vertices × 3 coordinates)
+         * @param {Array} mvpMatrix - Combined model-view-projection matrix
+         * @returns {Number} Average z-depth of the triangle
+         */
+        function calculateTriangleDepth(vertices, mvpMatrix) {
+            let totalZ = 0;
+            
+            // Transform each vertex and sum their z-coordinates
+            for (let i = 0; i < 3; i++) {
+                const vertex = [
+                    vertices[i * 3],
+                    vertices[i * 3 + 1],
+                    vertices[i * 3 + 2],
+                    1.0
+                ];
+                
+                const transformed = multiplyMatrixVector(mvpMatrix, vertex);
+                totalZ += transformed[2];
+            }
+            
+            // Return average z-depth
+            return totalZ / 3.0;
+        }
+
+        /**
+         * Sorts triangles by depth (back to front) for Painter's Algorithm
+         * Triangles further from camera (larger z) are drawn first
+         */
+        function sortTrianglesByDepth(modelViewMatrix, projectionMatrix) {
+            const mvpMatrix = multiplyMatrices(projectionMatrix, modelViewMatrix);
+            const triangles = [];
+            
+            // Create array of triangle objects with their depth
+            for (let i = 0; i < numVertices; i += 3) {
+                const vertices = positions.slice(i * 3, i * 3 + 9);
+                const depth = calculateTriangleDepth(vertices, mvpMatrix);
+                
+                triangles.push({
+                    startIndex: i,
+                    depth: depth
+                });
+            }
+            
+            // Sort triangles: furthest first (larger z drawn first)
+            triangles.sort((a, b) => b.depth - a.depth);
+            
+            return triangles;
+        }
+
+        // ============================================
+        // EVENT HANDLERS
+        // ============================================
+        
+        document.getElementById('rotYSlider').oninput = function(e) {
+            rotationY = parseFloat(e.target.value);
+            document.getElementById('rotYValue').textContent = rotationY.toFixed(2);
+        };
+
+        document.getElementById('rotXSlider').oninput = function(e) {
+            rotationX = parseFloat(e.target.value);
+            document.getElementById('rotXValue').textContent = rotationX.toFixed(2);
+        };
+
+        document.getElementById('distSlider').oninput = function(e) {
+            cameraDistance = parseFloat(e.target.value);
+            document.getElementById('distValue').textContent = cameraDistance.toFixed(1);
+        };
+
+        function setRenderMode(mode) {
+            renderMode = mode;
+            
+            // Update UI
+            document.getElementById('painterBtn').classList.remove('active');
+            document.getElementById('zBufferBtn').classList.remove('active');
+            document.getElementById(mode === 'painter' ? 'painterBtn' : 'zBufferBtn').classList.add('active');
+            
+            // Update status display
+            if (mode === 'painter') {
+                document.getElementById('algorithmStatus').textContent = 'Painter\'s Algorithm (Depth Sorting)';
+                document.getElementById('statusDescription').textContent = 
+                    'Polygons are sorted by depth and drawn back-to-front. Watch for artifacts when faces overlap!';
+                gl.disable(gl.DEPTH_TEST);
+            } else {
+                document.getElementById('algorithmStatus').textContent = 'Z-Buffer (Hardware Depth Test)';
+                document.getElementById('statusDescription').textContent = 
+                    'Hardware depth buffer correctly handles all overlapping cases per-pixel.';
+                gl.enable(gl.DEPTH_TEST);
+            }
+        }
+
+        function toggleAutoRotate() {
+            autoRotate = !autoRotate;
+            document.getElementById('autoRotateText').textContent = 
+                autoRotate ? 'Stop Auto-Rotate' : 'Start Auto-Rotate';
+        }
+
+        // ============================================
+        // RENDER LOOP
+        // ============================================
+        
+        /**
+         * Main rendering function
+         * Demonstrates the difference between Painter's Algorithm
+         * and proper Z-Buffer depth testing
+         */
+        function render() {
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+            
+            // Auto-rotation update
+            if (autoRotate) {
+                rotationY += 0.01;
+                document.getElementById('rotYValue').textContent = rotationY.toFixed(2);
+                document.getElementById('rotYSlider').value = rotationY;
+            }
+            
+            // Calculate camera position
+            const eye = vec3(
+                cameraDistance * Math.sin(rotationX) * Math.cos(rotationY),
+                cameraDistance * Math.cos(rotationX),
+                cameraDistance * Math.sin(rotationX) * Math.sin(rotationY)
+            );
+            
+            // Create view and projection matrices
+            const modelViewMatrix = lookAt(eye, vec3(0, 0, 0), vec3(0, 1, 0));
+            const projectionMatrix = perspective(45 * Math.PI / 180, 1.0, 0.1, 100.0);
+            
+            // Send matrices to shaders
+            gl.uniformMatrix4fv(modelViewMatrixLoc, false, flatten(modelViewMatrix));
+            gl.uniformMatrix4fv(projectionMatrixLoc, false, flatten(projectionMatrix));
+            
+            // RENDER BASED ON SELECTED ALGORITHM
+            if (renderMode === 'painter') {
+                // PAINTER'S ALGORITHM: Sort triangles by depth, draw back-to-front
+                const sortedTriangles = sortTrianglesByDepth(modelViewMatrix, projectionMatrix);
+                
+                for (let tri of sortedTriangles) {
+                    gl.drawArrays(gl.TRIANGLES, tri.startIndex, 3);
+                }
+            } else {
+                // Z-BUFFER: Let hardware handle depth testing
+                gl.drawArrays(gl.TRIANGLES, 0, numVertices);
+            }
+            
+            requestAnimationFrame(render);
+        }
+
+        // Initialize with Painter's algorithm
+        setRenderMode('painter');
+        render();
+    </script>
+</body>
+</html>
